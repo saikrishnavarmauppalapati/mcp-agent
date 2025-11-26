@@ -2,6 +2,9 @@ import { useState } from "react";
 import { callMcp } from "./api";
 import "./App.css";
 
+const BACKEND_URL =
+  import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
+
 function App() {
   const [query, setQuery] = useState("");
   const [output, setOutput] = useState(
@@ -12,7 +15,8 @@ function App() {
   const [videos, setVideos] = useState([]);
 
   const handleLogin = () => {
-    window.location.href = "http://localhost:3000/auth/login";
+    // ✅ now goes to your Render backend in production
+    window.location.href = `${BACKEND_URL}/auth/login`;
   };
 
   const handleSearch = async () => {
@@ -58,7 +62,11 @@ function App() {
     } catch (err) {
       console.error(err);
       setOutput(
-        JSON.stringify({ error: "Request failed. Check backend." }, null, 2)
+        JSON.stringify(
+          { error: "Request failed. Check backend." },
+          null,
+          2
+        )
       );
       setVideos([]);
       setStatus("Error while searching.");
@@ -78,7 +86,11 @@ function App() {
     } catch (err) {
       console.error(err);
       setOutput(
-        JSON.stringify({ error: "Request failed. Check backend." }, null, 2)
+        JSON.stringify(
+          { error: "Request failed. Check backend." },
+          null,
+          2
+        )
       );
       setVideos([]);
       setStatus("Error while loading history.");
@@ -103,7 +115,11 @@ function App() {
     } catch (err) {
       console.error(err);
       setOutput(
-        JSON.stringify({ error: "Request failed. Check backend." }, null, 2)
+        JSON.stringify(
+          { error: "Request failed. Check backend." },
+          null,
+          2
+        )
       );
       setVideos([]);
       setStatus("Error while generating recommendations.");
@@ -115,7 +131,6 @@ function App() {
   return (
     <div className="app-root">
       <div className="app-shell">
-        {/* Header */}
         <header className="app-header">
           <div className="app-title-block">
             <h1>YouTube MCP Agent</h1>
@@ -124,7 +139,6 @@ function App() {
           <div className="app-logo">YT</div>
         </header>
 
-        {/* Auth */}
         <section className="section">
           <div className="section-title">
             <span className="icon">🔐</span>
@@ -143,7 +157,6 @@ function App() {
           </button>
         </section>
 
-        {/* Search */}
         <section className="section">
           <div className="section-title">
             <span className="icon">🔍</span>
@@ -166,7 +179,6 @@ function App() {
           </div>
         </section>
 
-        {/* History */}
         <section className="section">
           <div className="section-title">
             <span className="icon">📜</span>
@@ -181,7 +193,6 @@ function App() {
           </button>
         </section>
 
-        {/* Recommendations */}
         <section className="section">
           <div className="section-title">
             <span className="icon">🤖</span>
@@ -200,7 +211,6 @@ function App() {
           </button>
         </section>
 
-        {/* Output */}
         <section className="section">
           <div className="section-title">
             <span className="icon">📤</span>
