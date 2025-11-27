@@ -3,220 +3,162 @@ import { youtubeAPI } from "./youtube.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Simple fallback parser for natural language search
-function simpleParsePrompt(prompt) {
-  if (!prompt) return { topic: "popular videos", maxResults: 5 };
-
-  const m = prompt.match(/(\d+)\s+videos?\s+(of|about)\s+(.+)/i);
-  let maxResults = 5;
-  let topic = prompt;
-
-  if (m) {
-    maxResults = parseInt(m[1], 10);
-    topic = m[3].trim();
+function requireAuth() {
+  if (!global.ACCESS_TOKEN) {
+    throw new Error("User must authenticate via /auth/login first.");
   }
+  return global.ACCESS_TOKEN;
+}
 
-  if (Number.isNaN(maxResults)) maxResults = 5;
-  if (maxResults < 1) maxResults = 1;
-  if (maxResults > 10) maxResults = 10;
+// Simple parser: extract number + topic from natural sentence
+function parseNaturalSearchPrompt(prompt) {
+  const numMatch = prompt.match(/(\d+)/);
+  let count = numMatch ? parseInt(numMatch[1], 10) : 5;
+  if (!Number.isFinite(count) || count <= 0) count = 5;
+  // Hard cap so user can’t ask “1000 videos”
+  if (count > 10) count = 10;
 
-  return { topic, maxResults };
+  // Rough topic cleaning
+  let topic = prompt.replace(/(\d+)/, "");
+  topic = topic.replace(/videos?/gi, "");
+  topic = topic.replace(/\bof\b/gi, "");
+  topic = topic.trim();
+
+  if (!topic) topic = prompt.trim();
+
+  return { topic, count };
 }
 
 export async function handleMcpRequest(body) {
   const { tool, input } = body || {};
 
-  if (!global.ACCESS_TOKEN) {
-    return { error: "User must authenticate via /auth/login first." };
-  }
-
-  console.log("MCP request:", tool, input);
-
   try {
-    // ---------------------------
-    // 1) Plain search
-    // ---------------------------
-    if (tool === "youtube.search") {
-      if (!input?.query) {
-        return { error: "Missing 'query' for youtube.search." };
-      }
-      return youtubeAPI.search(global.ACCESS_TOKEN, input.query);
-    }
-
-    // ---------------------------
-    // 2) Natural language search:
-    //    e.g. "I want 4 videos of bmw"
-    // ---------------------------
-    if (tool === "youtube.naturalSearch") {
-      if (!input?.prompt) {
-        return { error: "Missing 'prompt' for youtube.naturalSearch." };
+    switch (tool) {
+      // ───────────────────────────── youtube.search (keyword) ─────────────────────────────
+      case "youtube.search": {
+        const token = requireAuth();
+        if (!input || !input.query) {
+          return { error: "Missing 'query' for youtube.search." };
+        }
+        const data = await youtubeAPI.search(token, input.query, 10);
+        return data;
       }
 
-      let topic;
-      let maxResults;
+      // ───────────────────── youtube.naturalSearch (AI-style text, but exact count) ───────
+      case "youtube.naturalSearch": {
+        const token = requireAuth();
+        const prompt = input?.prompt;
+        if (!prompt) {
+          return { error: "Missing 'prompt' for youtube.naturalSearch." };
+        }
 
-      try {
-        // Try OpenAI first
-        const completion = await client.chat.completions.create({
-          model: "gpt-4.1-mini",
-          messages: [
-            {
-              role: "user",
-              content:
-                `You are a parser. The user prompt is:\n` +
-                input.prompt +
-                `\n\nExtract:\n{"topic":"bmw cars","maxResults":4}\n` +
-                `Return ONLY valid JSON.`
-            }
-          ]
+        const { topic, count } = parseNaturalSearchPrompt(prompt);
+
+        const data = await youtubeAPI.search(token, topic, count);
+
+        // Enforce exact count on returned items
+        const items = (data.items || []).slice(0, count);
+
+        return {
+          tool: "youtube.naturalSearch",
+          originalPrompt: prompt,
+          parsedTopic: topic,
+          requestedCount: count,
+          items
+        };
+      }
+
+      // ───────────────────────────── youtube.getActivitySummary ───────────────────────────
+      case "youtube.getActivitySummary": {
+        const token = requireAuth();
+
+        const [history, liked] = await Promise.all([
+          youtubeAPI.history(token),
+          youtubeAPI.likedVideos(token)
+        ]);
+
+        const merged = [];
+
+        (history.items || []).forEach((item) => {
+          const snippet = item.snippet || {};
+          const uploadId =
+            item.contentDetails?.upload?.videoId || item.id;
+
+          merged.push({
+            id: uploadId,
+            snippet,
+            contentDetails: item.contentDetails,
+            sources: ["history"]
+          });
         });
 
-        const raw = completion.choices[0]?.message?.content || "{}";
-        let parsed;
-        try {
-          parsed = JSON.parse(raw);
-        } catch {
-          parsed = {};
-        }
-
-        ({ topic, maxResults } = simpleParsePrompt(parsed.topic || input.prompt));
-        if (parsed.maxResults) {
-          const n = parseInt(parsed.maxResults, 10);
-          if (!Number.isNaN(n)) maxResults = Math.min(Math.max(n, 1), 10);
-        }
-        console.log("Natural search (OpenAI) parsed:", { topic, maxResults });
-      } catch (err) {
-        // Fallback when OpenAI quota is over / error
-        console.warn(
-          "OpenAI failed for naturalSearch, using fallback:",
-          err?.message || err
-        );
-        ({ topic, maxResults } = simpleParsePrompt(input.prompt));
-      }
-
-      return youtubeAPI.search(global.ACCESS_TOKEN, topic, maxResults);
-    }
-
-    // ---------------------------
-    // 3) Like a video
-    // ---------------------------
-    if (tool === "youtube.likeVideo") {
-      if (!input?.videoId) {
-        return { error: "Missing 'videoId' for youtube.likeVideo." };
-      }
-      await youtubeAPI.likeVideo(global.ACCESS_TOKEN, input.videoId);
-      return { success: true, videoId: input.videoId };
-    }
-
-    // ---------------------------
-    // 4) Trending
-    // ---------------------------
-    if (tool === "youtube.trending") {
-      const regionCode = input?.regionCode || "IN";
-      return youtubeAPI.trending(global.ACCESS_TOKEN, regionCode);
-    }
-
-    // -----------------------------------------------------
-    // 5) 🔥 MAIN FEATURE:
-    //    Load recent watched + liked videos + DAY SUMMARY
-    //    Used by "Load Recent Activity" button in the UI
-    // -----------------------------------------------------
-    if (tool === "youtube.getActivitySummary") {
-      // Recent channel activity (watched/uploaded/likes/etc.)
-      const history = await youtubeAPI.history(global.ACCESS_TOKEN, 50);
-      const historyItems = history.items || [];
-
-      // Videos explicitly liked by you
-      const liked = await youtubeAPI.likedVideos(global.ACCESS_TOKEN, 50);
-      const likedItems = liked.items || [];
-
-      // Merge, avoid duplicates by videoId
-      const map = new Map();
-
-      const add = (list, type) => {
-        for (const item of list) {
-          const details = item.contentDetails || {};
-          const vid =
-            details.upload?.videoId ||
-            details.recommendation?.resourceId?.videoId ||
-            details.like?.resourceId?.videoId ||
-            item.id; // fallback
-
-          if (!vid) continue;
-
-          if (!map.has(vid)) {
-            map.set(vid, {
-              ...item,
-              videoId: vid,
-              sources: new Set([type])
-            });
+        (liked.items || []).forEach((item) => {
+          const existing = merged.find((m) => m.id === item.id);
+          if (existing) {
+            if (!existing.sources.includes("liked")) {
+              existing.sources.push("liked");
+            }
           } else {
-            map.get(vid).sources.add(type);
+            merged.push({
+              id: item.id,
+              snippet: item.snippet,
+              contentDetails: item.contentDetails,
+              sources: ["liked"]
+            });
           }
-        }
-      };
-
-      add(historyItems, "watched");
-      add(likedItems, "liked");
-
-      const combined = Array.from(map.values()).map((item) => ({
-        ...item,
-        sources: Array.from(item.sources)
-      }));
-
-      // Create titles list for AI or fallback summary
-      const titles = combined
-        .map((i) => i.snippet?.title)
-        .filter(Boolean)
-        .slice(0, 40);
-
-      let daySummary;
-
-      try {
-        const completion = await client.chat.completions.create({
-          model: "gpt-4.1-mini",
-          messages: [
-            {
-              role: "user",
-              content:
-                "These are the titles of videos the user watched or liked recently:\n" +
-                titles.join("\n") +
-                "\n\nWrite a DAY SUMMARY with:\n" +
-                "- How many videos watched\n" +
-                "- How many liked\n" +
-                "- Main topics / interests\n" +
-                "- 3–5 types of videos to watch next.\n" +
-                "Keep it under 200 words."
-            }
-          ]
         });
 
-        daySummary =
-          completion.choices[0]?.message?.content?.trim() ||
-          "Summary not available.";
-      } catch (err) {
-        console.warn(
-          "OpenAI failed for activity summary, using simple fallback:",
-          err?.message || err
-        );
-        daySummary = `Today you interacted with ${
-          combined.length
-        } videos. You watched around ${
-          historyItems.length
-        }, and liked about ${likedItems.length}.`;
+        let summaryText =
+          "No AI summary (OpenAI quota may be exhausted).";
+
+        try {
+          const titles = merged
+            .map((v) => v.snippet?.title)
+            .filter(Boolean)
+            .slice(0, 20)
+            .join("\n");
+
+          if (titles && process.env.OPENAI_API_KEY) {
+            const completion = await client.chat.completions.create({
+              model: "gpt-4.1-mini",
+              messages: [
+                {
+                  role: "user",
+                  content: `Here are some video titles the user watched or liked today:\n${titles}\n\nWrite a short friendly summary: how many videos, what topics, and what you think the user is currently interested in.`
+                }
+              ]
+            });
+
+            summaryText =
+              completion.choices[0].message.content || summaryText;
+          }
+        } catch (err) {
+          // keep summaryText as fallback
+          console.error("OpenAI summary error:", err.message);
+        }
+
+        return {
+          summary: summaryText,
+          videos: merged
+        };
       }
 
-      return {
-        summary: daySummary,
-        watchedCount: historyItems.length,
-        likedCount: likedItems.length,
-        videos: combined
-      };
-    }
+      // ───────────────────────────── youtube.likeVideo ────────────────────────────────────
+      case "youtube.likeVideo": {
+        const token = requireAuth();
+        const videoId = input?.videoId;
+        if (!videoId) {
+          return { error: "Missing 'videoId' for youtube.likeVideo." };
+        }
+        const res = await youtubeAPI.likeVideo(videoId, token);
+        return res;
+      }
 
-    return { error: `Unknown MCP tool: ${tool}` };
+      default:
+        return { error: `Unknown MCP tool: ${tool}` };
+    }
   } catch (err) {
     console.error("MCP error:", err);
-    return { error: err.message || String(err) };
+    return { error: err.message || "Internal MCP processing error." };
   }
 }

@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const youtubeAPI = {
-  // Search videos with optional maxResults
+  // Standard search with count
   search: async (token, query, maxResults = 5) => {
     const res = await axios.get(
       "https://www.googleapis.com/youtube/v3/search",
@@ -12,69 +12,60 @@ export const youtubeAPI = {
           type: "video",
           maxResults
         },
-        headers: { Authorization: `Bearer ${token}` }
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
       }
     );
     return res.data;
   },
 
-  // Recent channel activity (uploads, likes, etc.)
-  history: async (token, maxResults = 10) => {
+  // Recent activities (watch / like)
+  history: async (token) => {
     const res = await axios.get(
       "https://www.googleapis.com/youtube/v3/activities",
       {
         params: {
           part: "snippet,contentDetails",
           mine: true,
-          maxResults
+          maxResults: 25
         },
-        headers: { Authorization: `Bearer ${token}` }
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
       }
     );
     return res.data;
   },
 
-  // ✅ NEW: videos you have liked (myRating=like)
-  likedVideos: async (token, maxResults = 10) => {
+  // Liked videos (for better “activity”)
+  likedVideos: async (token) => {
     const res = await axios.get(
       "https://www.googleapis.com/youtube/v3/videos",
       {
         params: {
-          part: "snippet,contentDetails,statistics",
+          part: "snippet,contentDetails",
           myRating: "like",
-          maxResults
+          maxResults: 25
         },
-        headers: { Authorization: `Bearer ${token}` }
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
       }
     );
     return res.data;
   },
 
-  // Trending videos by region
-  trending: async (token, regionCode = "IN", maxResults = 10) => {
-    const res = await axios.get(
-      "https://www.googleapis.com/youtube/v3/videos",
-      {
-        params: {
-          part: "snippet,contentDetails,statistics",
-          chart: "mostPopular",
-          regionCode,
-          maxResults
-        },
-        headers: { Authorization: `Bearer ${token}` }
-      }
-    );
-    return res.data;
-  },
-
-  // Like a video
-  likeVideo: async (token, videoId) => {
+  // Like a specific video
+  likeVideo: async (videoId, token) => {
     await axios.post(
       "https://www.googleapis.com/youtube/v3/videos/rate",
       {},
       {
         params: { id: videoId, rating: "like" },
-        headers: { Authorization: `Bearer ${token}` }
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
       }
     );
     return { success: true };
