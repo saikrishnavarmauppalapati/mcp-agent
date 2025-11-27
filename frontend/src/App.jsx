@@ -2,6 +2,9 @@ import { useState } from "react";
 import { callMcp } from "./api";
 import "./App.css";
 
+const BACKEND_URL =
+  import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
+
 function App() {
   const [aiQuery, setAiQuery] = useState("");
   const [status, setStatus] = useState("");
@@ -14,28 +17,18 @@ function App() {
     '{\n  "info": "Use the buttons above to start."\n}'
   );
 
-  // Local "optimistic" liked state (so UI updates immediately)
   const [likedIds, setLikedIds] = useState(new Set());
 
-  // Redirect to backend auth route
   const handleLogin = () => {
-    // For local dev
-    window.location.href = "http://localhost:3000/auth/login";
-    // For deployed frontend, change this to:
-    // window.location.href = "https://mcp-youtube-agent-kzx6.onrender.com/auth/login";
+    window.location.href = `${BACKEND_URL}/auth/login`;
   };
 
-  // ------------------------------------------------
-  // AI-powered natural language search
-  // e.g. "I want 4 videos of BMW"
-  // ------------------------------------------------
   const handleAiSearch = async () => {
     if (!aiQuery.trim()) return;
     try {
       setLoading(true);
       setStatus("Running AI search...");
       setSearchVideos([]);
-      // keep activity section as-is
 
       const data = await callMcp("youtube.naturalSearch", {
         prompt: aiQuery
@@ -87,9 +80,6 @@ function App() {
     }
   };
 
-  // ------------------------------------------------
-  // Load recent activity (watched + liked) + day summary
-  // ------------------------------------------------
   const handleLoadActivity = async () => {
     try {
       setLoading(true);
@@ -116,9 +106,9 @@ function App() {
               thumbs.medium?.url || thumbs.high?.url || thumbs.default?.url;
 
             const id =
+              item.id ||
               item.videoId ||
-              item.contentDetails?.upload?.videoId ||
-              item.id;
+              item.contentDetails?.upload?.videoId;
 
             if (!id || !snippet.title) return null;
 
@@ -134,7 +124,6 @@ function App() {
 
         setActivityVideos(mapped);
 
-        // Update local likedIds with anything backend says is "liked"
         const newLiked = new Set(likedIds);
         mapped.forEach((v) => {
           if (v.sources?.includes("liked")) newLiked.add(v.id);
@@ -162,14 +151,7 @@ function App() {
     }
   };
 
-  // ------------------------------------------------
-  // Like a video
-  //  - instantly mark as liked in UI
-  //  - then ask backend to like on YouTube
-  //  - then refresh activity so stats & list update
-  // ------------------------------------------------
   const handleLike = async (videoId) => {
-    // Optimistic UI: update likedIds immediately
     setLikedIds((prev) => {
       const next = new Set(prev);
       next.add(videoId);
@@ -180,29 +162,18 @@ function App() {
       setStatus("Liking video on YouTube...");
       await callMcp("youtube.likeVideo", { videoId });
       setStatus("Video liked! Refreshing activity...");
-
-      // Re-load activity so summary & list reflect new like
       await handleLoadActivity();
     } catch (err) {
       console.error(err);
       setStatus("Error: could not like video.");
-
-      // Optional: roll back optimistic like if you want
-      // setLikedIds(prev => {
-      //   const next = new Set(prev);
-      //   next.delete(videoId);
-      //   return next;
-      // });
     }
   };
 
-  // Helper to know if a video is liked (for button label/color)
   const isVideoLiked = (id) => likedIds.has(id);
 
   return (
     <div className="app-root">
       <div className="app-shell">
-        {/* HEADER */}
         <header className="app-header">
           <div className="app-title-block">
             <h1>YouTube MCP Agent</h1>
@@ -214,7 +185,7 @@ function App() {
           <div className="app-logo">YT</div>
         </header>
 
-        {/* AUTH */}
+        {/* Auth */}
         <section className="section">
           <div className="section-title">
             <span className="icon">🔐</span>
@@ -233,7 +204,7 @@ function App() {
           </button>
         </section>
 
-        {/* AI SEARCH */}
+        {/* AI Search */}
         <section className="section">
           <div className="section-title">
             <span className="icon">🔎</span>
@@ -291,7 +262,7 @@ function App() {
           )}
         </section>
 
-        {/* HISTORY & DAY SUMMARY */}
+        {/* History & Insights */}
         <section className="section">
           <div className="section-title">
             <span className="icon">📘</span>
@@ -309,7 +280,7 @@ function App() {
 
           {activitySummary && (
             <div className="summary-box">
-              <h3>Today&apos;s Summary</h3>
+              <h3>Today's Summary</h3>
               <pre>{activitySummary}</pre>
             </div>
           )}
@@ -333,9 +304,7 @@ function App() {
                       <h4>{v.title}</h4>
                       <p>{v.channel}</p>
                       {v.sources?.length > 0 && (
-                        <small>
-                          Sources: {v.sources.join(", ")}
-                        </small>
+                        <small>Sources: {v.sources.join(", ")}</small>
                       )}
                     </div>
                     <button
@@ -353,7 +322,7 @@ function App() {
           )}
         </section>
 
-        {/* STATUS + RAW OUTPUT */}
+        {/* Output */}
         <section className="section">
           <div className="section-title">
             <span className="icon">📤</span>
