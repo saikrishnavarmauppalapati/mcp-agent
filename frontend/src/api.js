@@ -1,9 +1,13 @@
 // src/api.js
 
-const API_URL = import.meta.env.VITE_BACKEND_URL;
+// Use deployed backend if VITE_BACKEND_URL is set, otherwise localhost
+const API_URL =
+  (import.meta.env.VITE_BACKEND_URL &&
+    import.meta.env.VITE_BACKEND_URL.replace(/\/$/, "")) ||
+  "http://localhost:3000";
 
-// Call backend MCP endpoint
-export async function callMcp(tool, input) {
+// Generic helper to call MCP tools on backend
+export async function callMcp(tool, input = {}) {
   const response = await fetch(`${API_URL}/mcp`, {
     method: "POST",
     headers: {
@@ -12,15 +16,16 @@ export async function callMcp(tool, input) {
     body: JSON.stringify({ tool, input })
   });
 
+  const text = await response.text();
+
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Backend error: ${message}`);
+    throw new Error(text || `Backend error (status ${response.status})`);
   }
 
-  const text = await response.text();
   try {
     return JSON.parse(text);
   } catch {
+    // Some tools return plain text (e.g. AI summary)
     return text;
   }
 }
