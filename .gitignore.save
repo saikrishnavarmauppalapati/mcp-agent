@@ -9,9 +9,3 @@ dist
 1~# Local env files (DO NOT COMMIT)
 backend/.env
 frontend/.env
-
-
-# Node stuff
-node_modules
-dist
-.vscode
