@@ -10,6 +10,7 @@ function requireAuth() {
   return global.ACCESS_TOKEN;
 }
 
+
 // Simple parser: extract number + topic from natural sentence
 function parseNaturalSearchPrompt(prompt) {
   const numMatch = prompt.match(/(\d+)/);
