@@ -61,6 +61,7 @@ function App() {
           })
           .filter(Boolean);
 
+        
         setSearchVideos(mapped);
       }
       setStatus("AI search complete.");
