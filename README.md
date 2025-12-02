@@ -1,4 +1,4 @@
-# 📘 YouTube MCP Agent
+# 📘 YouTube MCP Agent.
 
 ### AI-powered YouTube Assistant using Model Context Protocol (MCP)
 
