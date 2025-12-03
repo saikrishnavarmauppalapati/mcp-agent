@@ -144,10 +144,10 @@ cd mcp-youtube-agent
 Create `backend/.env`:
 
 ```
-PORT=3000
+PORT=10000
 CLIENT_ID=your-google-client-id
 CLIENT_SECRET=your-google-secret
-REDIRECT_URI=http://localhost:3000/auth/callback
+REDIRECT_URI=http://localhost:10000/auth/callback
 OPENAI_API_KEY=your-openai-key
 ```
 
@@ -162,7 +162,7 @@ node index.js
 Backend runs at:
 
 ```
-http://localhost:3000
+http://localhost:10000
 ```
 
 ---
@@ -172,7 +172,7 @@ http://localhost:3000
 ### 4️⃣ Create `frontend/.env`
 
 ```
-VITE_BACKEND_URL=http://localhost:3000
+VITE_BACKEND_URL=http://localhost:10000
 ```
 
 ### 5️⃣ Install & start
@@ -212,7 +212,7 @@ http://localhost:5173
   * CLIENT_SECRET
   * OPENAI_API_KEY
   * REDIRECT_URI (Render URL)
-  * PORT=3000
+  * PORT=10000
 
 ### Frontend on Vercel
 
@@ -270,7 +270,7 @@ MIT License – free to use, modify, and distribute.
 
 ## ✨ Author
 
-**Shreeshail H**
+** sai krishna varma uppalapati**
 YouTube MCP Agent Developer
 Terralogic — AI Engineering Challenge
 
